@@ -1,0 +1,122 @@
+""" Objectives : 1. Solving velocity-stress formulation of 1D wave equation with finite difference method
+2. Understanding the grid-staggering in connection with finite difference solution to the elastic wave equation
+"""
+
+# Import libraries (Please run it before the simulation code!)
+
+import numpy as np
+import matplotlib
+# Show Plot in The Notebook
+matplotlib.use("nbagg")
+import matplotlib.pyplot as plt
+matplotlib.rcParams['figure.facecolor'] = 'w' # remove grey background
+
+# Initialization of parameters
+
+# Simple finite difference solver
+# Elastic wave equation
+# 1-D regular staggered grid
+
+# Basic parameters
+nt = 1300                                              # number of time steps
+nx = 1000                                              # number of grid points in x
+c0 = 4500                                              # velocity (m/sec) (shear wave)
+eps = 0.8                                              # stability limit
+isnap = 2                                              # snapshot frequency
+isx = round(nx/2)                                      # source location
+f0 = 0.1                                               # frequency (Hz)
+xmax = 1000000.                                        # maximum range (m)
+rho0 = 2500.                                           # density (kg/m**3)
+mu0 = rho0*c0**2.                                      # shear modulus (Pa)
+nop = 4                                                # number of operator either 2 or 4
+
+dx = xmax / (nx-1)                                     # calculate space increment (m)
+x = (np.arange(nx)*dx)                                 # initialize space coordinates 
+dt = eps * dx/c0                                       # calculate time step from stability criterion(s)
+
+# Source time function
+t = (np.arange(0,nt) * dt)                             # initialize time axis
+T0 = 1. / f0                                           # period
+a = 4. / T0                                            # half-width (so called sigma)
+t0 = T0 / dt
+tmp = np.zeros(nt)
+for it in range(nt):
+    t = (it - t0) * dt
+    tmp[it] = -2 * a * t * np.exp(-(a * t) ** 2)       # derivative of Gaussian (so called sigma)
+src = np.zeros(nt)                                     # source
+src[0:len(tmp)] = tmp
+lam = c0 * T0                                          # wavelength
+
+# Extrapolation scheme and the plots
+# Initialization of plot
+
+# Initialization of fields
+v = np.zeros(nx)                                       # velocity
+vnew = v
+dv = v
+
+s = np.zeros(nx)                                       # stress
+snew = s
+ds = s
+
+mu = np.zeros(nx)                                      # shear modulus
+rho = mu                                               
+rho = rho + rho0
+mu = mu + mu0
+
+# Print setup parameters
+print("rho =", rho0, ", f_dom =", f0, ", stability limit =", eps, ", n_lambda", (lam/dx))
+
+# Initialize the plot
+title = "FD Elastic 1D staggered grid"
+fig = plt.figure(figsize=(10,8))
+ax1 = fig.add_subplot(2, 1, 1)
+ax2 = fig.add_subplot(2, 1, 2)
+line1 = ax1.plot(x, v, color = "red", lw = 1.5)
+line2 = ax2.plot(x, s, color = "blue", lw = 1.5)
+ax1.set_ylabel('velocity (m/s)')
+ax2.set_xlabel('x (m)')
+ax2.set_ylabel('stress (Pa)')
+plt.ion()
+plt.show()
+
+# Begin extrapolation and update the plot
+for it in range (nt):
+    
+    # Stress derivative
+    for i in range (2, nx-2):
+        ds[i] = (0.0416666 * s[i-1] - 1.125 * s[i] + 1.125 * s[i+1] - 0.0416666 * s[i+2]) / (dx)
+    
+    # Velocity extrapolation
+    v = v + dt * ds / rho
+    
+    # Add source term at isx
+    v[isx] = v[isx] + dt * src[it] / (dt * rho[isx])
+    
+    # Velocity derivative
+    for i in range (2, nx-2):
+
+        dv[i] = (0.0416666 * v[i-2] - 1.125 * v[i-1] + 1.125 * v[i] - 0.0416666 * v[i+1]) / (dx)
+        
+    # Stress extrapolation
+    s = s + dt * mu * dv
+    
+    # Updating the plots
+    if not it % isnap: 
+        for l in line1:
+            l.remove()
+            del l               
+        for l in line2:
+            l.remove()
+            del l 
+        line1 = ax1.plot(x, v, color = "red", lw = 1.5)
+        line2 = ax2.plot(x, s, color = "blue", lw = 1.5)
+    
+        ax1.set_title(title + ", time step: %i" % (it))  
+        plt.gcf().canvas.draw()
+
+plt.ioff()
+plt.show()
+
+
+
