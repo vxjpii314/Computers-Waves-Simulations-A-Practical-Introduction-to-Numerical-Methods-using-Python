@@ -1,0 +1,161 @@
+""" Objectives : 1. Initialize the Chebyshev derivative matrix  Dij and display the Chebyshev derivative matrix
+2. Define and initialize space, material and source parameters
+3. Extrapolate time using the previously defined Chebyshev derivative matrix"""
+
+# This is a configuration step for the exercise. Please run it before calculating the derivative!
+import numpy as np
+import matplotlib
+# Show Plot in The Notebook
+# -----------------------
+matplotlib.use("nbagg")
+import matplotlib.pyplot as plt
+
+# Import python function from the file "ricker.py"
+# -----------------------
+from ricker import ricker 
+
+# Ignore Warning Messages
+# -----------------------
+import warnings
+warnings.filterwarnings("ignore")
+
+# Define Function that initializes the Chebyshev derivative matrix D_{ij} 
+def get_cheby_matrix(nx):
+    cx = np.zeros(nx+1)
+    x = np.zeros(nx+1)
+    for ix in range(0,nx+1):
+        x[ix] = np.cos(np.pi * ix / nx)
+   
+    cx[0] = 2.
+    cx[nx] = 2.
+    cx[1:nx] = 1.
+   
+    D = np.zeros((nx+1,nx+1))
+    for i in range(0, nx+1):
+        for j in range(0, nx+1):
+            if i==j and i!=0 and i!=nx:
+                D[i,i]=-x[i]/(2.0*(1.0-x[i]*x[i]))
+            else:
+                D[i,j]=(cx[i]*(-1)**(i+j))/(cx[j]*(x[i]-x[j]))
+  
+    D[0,0] = (2.*nx**2+1.)/6.
+    D[nx,nx] = -D[0,0]
+    return D 
+
+# Call the chebyshev differentiation matrix
+# ---------------------------------------------------------------
+D_ij = get_cheby_matrix(50)
+
+# ---------------------------------------------------------------
+# Display Differentiation Matrix
+# ---------------------------------------------------------------
+plt.imshow(D_ij, interpolation="bicubic", cmap="gray")
+plt.title('Differentiation Matrix $D_{ij}$')
+plt.axis("off")
+plt.tight_layout()
+plt.show()
+
+# Basic parameters
+# ---------------------------------------------------------------
+tmax  = 0.0003    # Seismogram length
+eps   = 1.4       # stability limit
+isx   = 100       # Index of source location
+lw    = 0.7       # Linewidth    
+f0    = 50000     # dominant frequency
+iplot = 20        # Snapshot frequency
+
+# space domain
+nx = 100     # number of grid points in x 199
+xs = np.floor(nx/2)      # source location
+x  = np.zeros(nx+1) 
+
+# initialization of pressure fields
+u = np.zeros(nx+1) 
+unew = np.zeros(nx+1)
+uold = np.zeros(nx+1)
+d2u  = np.zeros(nx+1) 
+
+# Background elastic parameters
+rho0 = 2500.   # kg/m^3
+c0 = 3000.     # m/s
+mu0 = rho0*c0**2 # Pa 
+
+# material parameters (in vector)
+rho = np.zeros(nx+1) + rho0
+c = np.zeros(nx+1) + c0
+mu = np.zeros(nx+1) + mu0
+
+
+# material parameters (heterogeneous case, uncomment if desired)
+#mu[:np.int(nx/3)]  = 0.6*mu[:np.int(nx/3)]
+#c = np.sqrt(mu/rho)
+
+# Initialize spatial domain [-1, 1]
+for ix in range(0,nx+1):
+    x[ix] = np.cos(ix * np.pi / nx) 
+dxmin = min(abs(np.diff(x)))
+dxmax = max(abs(np.diff(x)))
+
+dt = eps*dxmin/np.max(c)    # calculate time step from stability criterion
+nt = int(round(tmax/dt))    # Number of time steps
+
+# source time function
+# ---------------------------------------------------------------
+t = np.arange(1, nt+1)*dt  # initialize time axis
+T0 = 1./f0
+tmp = ricker(dt, T0)
+isrc = tmp
+tmp = np.diff(tmp)
+src = np.zeros(nt) 
+src[0:np.size(tmp)] = tmp
+
+#spatial source function
+# ---------------------------------------------------------------
+sigma = 1.5*dxmax
+x0 = x[int(xs)]
+sg = np.exp(-1/sigma**2*(x-x0)**2)
+sg = sg/max(sg) 
+
+# Initialize animated plot
+# ---------------------------------------------------------------
+plt.figure(figsize=(10,6))
+line = plt.plot(x, u, 'k.', lw=2)
+plt.title('Chebyshev Method - 1D Elastic wave', size=16)
+plt.xlabel(' x(m)', size=14)
+plt.ylabel(' Amplitude ', size=14)
+
+plt.ion() # set interactive mode
+plt.show()
+# ---------------------------------------------------------------
+# Time extrapolation
+# ---------------------------------------------------------------
+# Differentiation matrix
+D = get_cheby_matrix(nx)
+for it in range(nt):
+    # Space derivatives (corrected May 11, 2020)
+    du = mu * D @ u
+    du = D @ du/rho
+    
+    
+    # Time extrapolation 
+    unew = 2*u - uold + np.transpose(du) * dt**2
+    
+    # Source injection
+    unew = unew + sg*src[it]*dt**2/rho
+    
+    # Remapping
+    uold, u = u, unew
+    u[0] = 0; u[nx] = 0 # set boundaries pressure free 
+
+    # --------------------------------------   
+    # Animation plot. Display solution
+    if not it % iplot: 
+        for l in line:
+            l.remove()
+            del l               
+            
+        # -------------------------------------- 
+        # Display lines
+        line = plt.plot(x, u, 'k.', lw=1.5)
+        plt.gcf().canvas.draw()
+
