@@ -1,0 +1,87 @@
+""" Objectives : 1. Define Lagrange polynomials
+2. Define a function to initialize and calculate Lagrange polynomial for order N
+3. Interpolation of a function using GLL collocation points """
+
+# Setup
+%matplotlib inline
+
+import numpy as np
+import matplotlib.pyplot as plt
+from gll import gll
+
+# Prettier plots.
+plt.style.use('ggplot')
+
+def lagrange(N, i, x, xi):
+    """
+    Function to calculate  Lagrange polynomial for order N
+    and polynomial i [0, N] at location x at given collocation points xi
+    (not necessarily the GLL-points)
+    """
+    fac = 1
+    for j in range(-1, N):
+        if j != i:
+            fac = fac * ((x - xi[j + 1]) / (xi[i + 1] - xi[j + 1]))
+    return fac
+
+N = 100   # N_max = 12
+x = np.linspace(-1, 1, 1000)
+xi, _ = gll(N)
+
+# -------------------------------
+plt.figure(figsize=(10, 6))
+for _i in range(-1,N):
+    plt.plot(x, lagrange(N, _i, x, xi))
+plt.ylim(-0.3, 1.1)
+plt.title("Lagrange Polynomials of order %i" % N)
+plt.show()
+
+# Lagrange Interpolation
+# ----------------------------------------------------------------
+# Initialize space in the interval [-1, 1] for plotting the original and interpolated function
+nx = 1000
+x = np.linspace(-1, 1, nx)
+    
+# Define an arbitrary function you want to interpolate (change it!)
+f = np.sin(np.pi * x)
+    
+# Give order of Lagrange polynomial
+N = 11
+
+# Get collocation points xi from gll routine (worth having a look)
+[xi, w] = gll(N)
+fi = np.interp(xi, x, f) 
+  
+# Initialize Lagrange polynomials on the defined grid
+lp = np.zeros((N + 1, len(x)))
+for i in range(0, len(x)):
+    for j in range(-1, N):
+        lp[j + 1, i] = lagrange(N, j, x[i], xi)
+        
+######################################################
+# Calculate interpolating polynomials by multiplying 
+# Lagrange polynomials with function values at xi
+s = x * 0
+for j in range(0, N + 1):   
+    s = s + lp[j, :] * fi[j]
+#
+######################################################
+
+# Calculate error of original and interpolated function
+error = np.sum((np.abs(f - s))) / np.sum(np.abs(f)) * 100
+
+# -------------------
+# Plot results  
+plt.figure(figsize=(10, 6))
+plt.plot(x, s, 'k-', color='green', label='Interpolating function')
+plt.plot(x, f, 'k--', label='Original function')
+plt.plot(xi, fi, 's', label='Collocation points')
+plt.title('Relative error: %g %%' % error)
+plt.xlabel('x')
+plt.ylabel('f(x)')
+
+plt.legend(loc="upper left")
+plt.show()
+
+
+
