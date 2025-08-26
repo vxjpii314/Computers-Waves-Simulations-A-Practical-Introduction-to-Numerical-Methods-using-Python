@@ -1,0 +1,2 @@
+"""Objectives : 1. Learn how to define high-order central finite-difference operators
+2. Investigate the behaviour of the operators with increasing length """
