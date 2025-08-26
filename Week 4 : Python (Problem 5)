@@ -1,0 +1,295 @@
+"""Objectives : 1. implementation of the 1D advection equation
+2. solved using the upwind or the centred finite difference scheme
+3. study the stability of the two methods when solving the one-dimensional advection equation
+4. implementation of the Predictor-corrector method, McCormack scheme and Lax Wendroff Scheme """
+
+# Import Libraries (PLEASE RUN THIS CODE FIRST!) 
+# ----------------------------------------------
+%matplotlib nbagg
+import math
+import numpy as np
+import matplotlib.pylab as plt
+
+# Show Plot in The Notebook
+#plt.switch_backend("nbagg")
+
+# Ignore Warning Messages
+# -----------------------
+import warnings
+warnings.filterwarnings("ignore")
+
+# PARAMATER CONFIGURATION
+# ---------------------------------------------------------------------------
+nx = 1250          # Number of grid points.
+v = 5500.          # Acoustic velocity in m/s.
+x_max = 10000      # Length of the domain in m.
+eps = 0.9          # CFL
+tmax = 1.0         # Simulation time in s
+isnap = 2          # Plot the solution each `isnap` timesteps.
+sig = 100          # Sigma for the gaussian source time function
+x0 = 1000          # Center point of the source time function
+
+# INITIALIZE COORDINATES AND SET UP THE MODEL
+
+# Choose between the finite difference scheme: "upwind" or a "centered"
+# -------------------------
+fd_type = "upwind"
+#fd_type = "centered"
+
+
+# Spatial setup
+# -------------------------
+x = np.linspace(0, x_max, nx)
+dx = x[1] - x[0]
+
+# Use wave based CFL criterion, time step will be calculated from stability criterion
+dt = eps * dx / v
+
+# Simulation time
+# -------------------------
+nt = int(tmax / dt)
+
+# Initial condition in space
+# -------------------------
+sx = np.exp(-1.0 / sig ** 2.0 * (x - x0) ** 2.0);
+
+# Initialize fields
+# -------------------------
+u = sx
+unew = np.zeros(nx)
+du = np.zeros(nx)
+k1 = np.zeros(nx)
+k2 = np.zeros(nx)
+q = np.zeros(nx)
+
+# Plot the initial conditions
+plt.close()
+plt.figure(figsize=(10,6))
+plt.title("Initial Conditions")
+plt.grid()
+plt.plot(x, u, color="black", lw=2)
+plt.xlabel("x (m)")
+plt.ylabel("Amplitude")
+plt.show()
+
+# Advection Equation - Euler Scheme
+
+# Plot the initial condition for comparison 
+plt.figure(figsize=(10, 6))
+lines = plt.plot(x, u, color="black", lw=1.5, label="Current State")
+plt.plot(x, u, color="0.5", ls="--", lw=1, label="Initial State")
+plt.xlabel("x (m)")
+plt.ylabel("Amplitude")
+if fd_type == "upwind":
+    title = "Upwind finite-difference - Euler scheme"
+elif fd_type == "centered":
+    title = "Centered finite-difference- Euler scheme"
+else:
+    raise ValueError("fd_type must be 'forward' or 'centered'")
+
+plt.grid() 
+plt.ylim(u.min(), u.max() * 1.1)
+plt.legend()
+plt.ion()
+plt.show()
+
+# Here we start the actual time extrapolation 
+# Calculate the space derivative of u(x) and write it into du(x) 
+for i in range(nt):
+    du[:] = 0.0
+    for j in range(1, nx - 1):
+        if fd_type == "upwind":
+            du[j] = (u[j] - u[j - 1]) / dx
+        elif fd_type == "centered":
+            du[j] = (u[j + 1] - u[j - 1]) / (2.0 * dx)
+
+    # time extrapolation scheme (Euler)
+    unew = u - dt * v * du
+
+    # The new presence is the current future!
+    u = unew
+    
+    # Update plot.
+    if not i % isnap:
+        for l in lines:
+            l.remove()
+            del l
+        lines = plt.plot(x, unew, color="black", lw=1.5)        
+        plt.title(title + ", time step: %i, time: %.2g s" % (i, i * dt))
+        plt.gcf().canvas.draw()        
+plt.ioff()
+
+# Advection Equation - Predictor Corrector Scheme
+
+# Initial conditions
+u = sx
+unew = np.zeros(nx)
+du = np.zeros(nx)
+k1 = np.zeros(nx)
+k2 = np.zeros(nx)
+q = np.zeros(nx)
+
+
+# Plot the initial condition for comparison 
+# Initialize figures
+plt.figure(figsize=(10, 6))
+lines = plt.plot(x, u, color="black", lw=1.5, label="Current State")
+plt.plot(x, u, color="0.5", ls="--", lw=1, label="Initial State")
+
+plt.xlabel("x (m)")
+plt.ylabel("Amplitude")
+title = "Upwind finite-difference scheme - Predictor corrector method"
+
+plt.grid() 
+plt.ylim(u.min(), u.max() * 1.1)
+plt.legend()
+plt.ion()
+plt.show()
+# # Here we start the actual time extrapolation, the task for you is to calculate 
+# the space derivative of u(x) and write it into du(x) 
+
+for i in range(nt):
+    du[:] = 0.0
+    # Calculate the spatial derivative using the upwind approach
+    for j in range(1, nx - 1):
+            du[j] = (u[j] - u[j - 1]) / dx
+
+    # time extrapolation
+    # predictor
+    k1 = v * du
+    q = u - dt*v*du
+    
+    unew = q
+
+    # corrector 
+    for j in range(1, nx - 1):
+        du[j]=(q[j+1]-q[j])/dx
+    k2 = v*du
+    
+    # predictor corrector extrapolation
+    unew = u - 0.5*dt*(k1+k2)
+
+# The new presence is the current future!
+    u = unew
+    
+    # Update plot if desired.
+    if not i % isnap:
+        for l in lines:
+            l.remove()
+            del l
+        lines = plt.plot(x, unew, color="black", lw=1.5)
+        
+        plt.title(title + ", time step: %i, time: %.2g s" % (i, i * dt))
+        plt.gcf().canvas.draw()    
+
+    
+plt.ioff()
+
+# Advection Equation - McCormack Scheme
+
+# Initial conditions
+u = sx
+unew = np.zeros(nx)
+du = np.zeros(nx)
+k1 = np.zeros(nx)
+k2 = np.zeros(nx)
+q = np.zeros(nx)
+
+
+# Plot the initial condition for comparison 
+# Initialize figures
+plt.figure(figsize=(10, 6))
+lines = plt.plot(x, u, color="black", lw=1.5, label="Current State")
+plt.plot(x, u, color="0.5", ls="--", lw=1, label="Initial State")
+
+plt.xlabel("x (m)")
+plt.ylabel("Amplitude")
+title = "McCormack scheme"
+
+plt.grid() 
+plt.ylim(u.min(), u.max() * 1.1)
+plt.legend()
+plt.ion()
+plt.show()
+# # Here we start the actual time extrapolation, the task for you is to calculate 
+# the space derivative of u(x) and write it into du(x) 
+
+for i in range(nt):
+    du[:] = 0.0
+    # Calculate the spatial derivative using the upwind approach
+    for j in range(1, nx - 1):
+            du[j] = (u[j] - u[j - 1]) / dx
+
+    # time extrapolation
+    # 1st step
+    q = u - dt*v*du
+    
+    # 2nd step 
+    for j in range(1, nx - 1):
+        du[j]=(q[j+1]-q[j])/dx
+    
+    # update
+    unew = 0.5*(u + q) - v*dt*0.5*du
+    # The new presence is the current future!
+    u = unew
+    
+    # Update plot if desired.
+    if not i % isnap:
+        for l in lines:
+            l.remove()
+            del l
+        lines = plt.plot(x, unew, color="black", lw=1.5)
+        
+        plt.title(title + ", time step: %i, time: %.2g s" % (i, i * dt))
+        plt.gcf().canvas.draw()    
+
+plt.ioff()
+
+# Advection Equation - Lax Wendroff Scheme
+
+# Initial conditions
+u = sx
+q = np.zeros(nx)
+du = np.zeros(nx)
+
+# plot the initial condition for comparison 
+# Initialize figures
+plt.figure(figsize=(10,6))
+lines = plt.plot(x, u, color="black", lw=1.5, label="Current State")
+plt.plot(x, u, color="0.5", ls="--", lw=1, label="Initial State")
+plt.xlabel("x (m)")
+plt.ylabel("Amplitude")
+title = "Lax Wendroff scheme"
+plt.grid() 
+plt.ylim(u.min(), u.max() * 1.1)
+plt.legend()
+plt.ion()
+plt.show()
+# Lax Wendroff  scheme
+for i in range(1,nt):
+    # (central diff)
+    for j in range(1,nx-1):
+       # q =  a*(v[j+1]-2.*v[j]+v[j-1])
+       # vnew[j]=v[j] + q
+        du[j] = (u[j + 1] - u[j - 1]) / (2.0 * dx)
+        q[j] = dt**2/(2.0*dx**2)*v**2*(u[j+1]-2.*u[j]+u[j-1])
+    # time extrapolation scheme (Euler)
+    unew = u - dt * v * du + q
+    u = unew
+    # time extrapolation
+               
+    # Plotting
+ 
+    if not i % isnap:
+        for l in lines:
+            l.remove()
+            del l
+        lines = plt.plot(x, unew, color="black", lw=1.5)        
+        plt.title(title + ", time step: %i, time: %.2g s" % (i, i * dt))
+        plt.gcf().canvas.draw()        
+plt.ioff()
+
+
+
+
+
