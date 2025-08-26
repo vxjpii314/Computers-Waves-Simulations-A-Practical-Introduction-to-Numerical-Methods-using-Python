@@ -1,0 +1,194 @@
+"""Objectives : 1. Initialize and setup of the finite element solution for the 1D wave equation
+2. Define the Mass Matrix and Stiffness Matrix and visually inspect their structure
+3. Implementation of a finite difference scheme for comparision with the finite element scheme
+4. The finite element solution using the computed mass matrix M and stiffness matrix K"""
+
+# Import all necessary libraries, this is a configuration step for the exercise.
+# Please run it before the simulation code!
+import numpy as np
+import matplotlib
+# Show Plot in The Notebook
+matplotlib.use("nbagg")
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+
+# Initialization of setup
+# ---------------------------------------------------------------
+# Basic parameters
+nx    = 1000    # Number of collocation points  
+xmax  = 10000.  # Physical dimension [m]
+vs    = 3000    # Wave velocity [m/s] 
+ro0   = 2500    # Density [kg/m^3]
+nt    = 2000    # Number of time steps
+isx   = 500     # Source location [m] 
+eps   = 0.5     # Stability limit
+iplot = 20      # Snapshot frequency
+
+dx = xmax/(nx-1)           # calculate space increment
+x  = np.arange(0, nx)*dx   # initialize space coordinates
+x  = np.transpose(x)
+
+h = np.diff(x)  # Element sizes [m]
+
+# parameters
+ro = x*0 + ro0
+mu = x*0 + ro*vs**2
+
+# time step from stabiity criterion
+dt = 0.5*eps*dx/np.max(np.sqrt(mu/ro))
+# initialize time axis
+t   = np.arange(1, nt+1)*dt  
+
+# ---------------------------------------------------------------
+# Initialize fields
+# ---------------------------------------------------------------
+u    = np.zeros(nx)
+uold = np.zeros(nx)
+unew = np.zeros(nx)
+
+p    = np.zeros(nx)
+pold = np.zeros(nx)
+pnew = np.zeros(nx)
+
+# Initialization of the source time function
+# ---------------------------------------------------------------
+pt  = 20*dt     # Gaussian width
+t0  = 3*pt      # Time shift
+src = -2/pt**2 * (t-t0) * np.exp(-1/pt**2 * (t-t0)**2)
+
+# Source vector
+# ---------------------------------------------------------------
+f = np.zeros(nx); f[isx:isx+1] = f[isx:isx+1] + 1.
+
+# ---------------------------------------------------------------
+# Plot source time fuction
+# ---------------------------------------------------------------
+plt.plot(t, src, color='b', lw=2, label='Source time function')
+plt.ylabel('Amplitude', size=16)
+plt.xlabel('time', size=16)
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Mass matrix M_ij
+# ---------------------------------------------------------------
+M = np.zeros((nx,nx), dtype=float)
+for i in range(1, nx-1):
+    for j in range (1, nx-1):
+        if j==i:
+            M[i,j] = (ro[i-1]*h[i-1] + ro[i]*h[i])/3
+        elif j==i+1:
+            M[i,j] = ro[i]*h[i]/6
+        elif j==i-1:
+            M[i,j] = ro[i-1]*h[i-1]/6
+        else:
+            M[i,j] = 0
+            
+# Corner elements
+M[0,0] = ro[0]*h[0]/3
+M[nx-1,nx-1] = ro[nx-1]*h[nx-2]/3
+# Invert M
+Minv = np.linalg.inv(M)
+
+# Stiffness matrix Kij
+# ---------------------------------------------------------------
+K = np.zeros((nx,nx), dtype=float)
+for i in range(1, nx-1):
+    for j in range(1, nx-1):
+        if i==j:
+            K[i,j] = mu[i-1]/h[i-1] + mu[i]/h[i]
+        elif i==j+1:
+            K[i,j] = -mu[i-1]/h[i-1]
+        elif i+1==j:
+            K[i,j] = -mu[i]/h[i]
+        else:
+            K[i,j] = 0
+
+K[0,0] = mu[0]/h[0]
+K[nx-1,nx-1] = mu[nx-1]/h[nx-2]
+
+# Display finite element matrices
+# ---------------------------------------------------------------
+fig, (ax1, ax2) = plt.subplots(1, 2)
+ax1.imshow(K[1:10,1:10])
+ax1.set_title('Finite-Element Stiffness Matrix $\mathbf{K}$')
+ax1.axis("off")
+
+ax2.imshow(Minv[1:10,1:10])
+ax2.set_title('Finite-Element Mass Matrix $\mathbf{M^{-1}}$')
+ax2.axis("off")
+
+plt.tight_layout()
+plt.show()
+
+# Initialize finite differences matrices 
+# ---------------------------------------------------------------
+Mfd = np.zeros((nx,nx), dtype=float)
+D  = np.zeros((nx,nx), dtype=float)
+dx = h[1]
+
+for i in range(nx):
+    Mfd[i,i] = 1./ro[i]
+    if i>0:
+        if i<nx-1:
+            D[i+1,i] =1
+            D[i-1,i] =1
+            D[i,i] = -2
+            
+D = ro0 * vs**2 * D/dx**2
+
+# Display differences matrices
+# ---------------------------------------------------------------
+fig, (ax1, ax2) = plt.subplots(1, 2)
+ax1.imshow(-D[1:10,1:10])
+ax1.set_title('Finite-Difference Derivative Matrix $\mathbf{D}$')
+ax1.axis("off")
+
+ax2.imshow(Mfd[1:10,1:10])
+ax2.set_title('Finite-Difference Mass Matrix $\mathbf{M_{fd}}$')
+ax2.axis("off")
+
+plt.tight_layout()
+plt.show()
+
+# Initialize animated plot
+# ---------------------------------------------------------------
+plt.figure(figsize=(12,4))
+
+line1 = plt.plot(x, u, 'k', lw=1.5, label='FEM')
+line2 = plt.plot(x, p, 'r', lw=1.5, label='FDM')
+plt.title('Finite elements 1D Animation', fontsize=16)
+plt.ylabel('Amplitude', fontsize=12)
+plt.xlabel('x (m)', fontsize=12)
+
+plt.ion()   # set interective mode
+plt.show()
+
+# ---------------------------------------------------------------
+# Time extrapolation
+# ---------------------------------------------------------------
+for it in range(nt):
+    # --------------------------------------
+    # Finite Element Method
+    unew = (dt**2) * Minv @ (f*src[it]  -  K @ u) + 2*u - uold                         
+    uold, u = u, unew
+    
+    # --------------------------------------
+    # Finite Difference Method
+    pnew = (dt**2) * Mfd @ ( f/dx*src[it]+ D @ p) + 2*p - pold
+    pold, p = p, pnew
+     
+    # --------------------------------------   
+    # Animation plot. Display both solutions
+    if not it % iplot:
+        for l in line1:
+            l.remove()
+            del l
+        for l in line2:
+            l.remove()
+            del l
+        line1 = plt.plot(x, u, 'k', lw=1.5, label='FEM')
+        line2 = plt.plot(x, p, 'r', lw=1.5, label='FDM')
+        plt.legend()
+        plt.gcf().canvas.draw()
+
